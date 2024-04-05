@@ -22,7 +22,6 @@
 *.cfg
 !setup.cfg
 !cfg/yolov3*.cfg
-!1.jpg
 
 storage.googleapis.com
 runs/*
@@ -71,7 +70,6 @@ yolov3-tiny.conv.15
 *.ptl
 *.trt
 
-!yolov7-tiny.pt
 # GitHub Python GitIgnore ----------------------------------------------------------------------------------------------
 # Byte-compiled / optimized / DLL files
 __pycache__/

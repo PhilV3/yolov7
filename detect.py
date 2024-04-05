@@ -1,6 +1,5 @@
-#from approche_client import ApproachClient
 import argparse
-import time
+#import time
 from pathlib import Path
 import cv_bridge
 from cv_bridge import CvBridge, CvBridgeError
@@ -12,6 +11,7 @@ import numpy as np
 import rospy
 from numpy import random
 from geometry_msgs.msg import Vector3
+from PrepareMsgObjectsDetection import *
 
 from sensor_msgs.msg import CompressedImage
 from homodeus_msgs.msg import *
@@ -24,7 +24,7 @@ from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
 def detect():
-    t10 = time.time()
+    t10 = time()
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
@@ -33,8 +33,12 @@ def detect():
     # sacha
     webcam=None
     rospy.init_node("object_detection")
-    #approcheClient = ApprochClient()
-    ###
+    # A ajouter apres le init_node dans detect.py
+    bridge = CvBridge()
+    depth_image = None
+    objects_detection_pub = rospy.Publisher('/Homodeus/Perception/Detect', ObjectsDetection)
+
+    objDetection = PrepareMsgObjectsDetection()
 
     # Directories
     save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
@@ -79,7 +83,7 @@ def detect():
     view_img = True
     # Sacha - Dont save video - saves 700ms
     save_img = True
-    print("avant jeu loop while: ", time.time()-t10)
+    print("avant jeu loop while: ", time()-t10)
 
     while True:
         #Sacha import picture temp
@@ -95,14 +99,18 @@ def detect():
         monimg = monimg[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         monimg = np.ascontiguousarray(monimg)
 
+        # A ajouter apres l'autre wait_for_message
+        image : Image = rospy.wait_for_message('xtion/depth_registered/image_raw', Image, timeout=None)
+        depth_image = bridge.imgmsg_to_cv2(image, "passthrough")
+
         # Run inference
         if device.type != 'cpu':
             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
         old_img_w = old_img_h = imgsz
         old_img_b = 1
 
-        t0 = time.time()
-        print("avant loop: ", time.time()-t10)
+        t0 = time()
+        print("avant loop: ", time()-t10)
         for path, img, im0s, vid_cap in dataset:
             img = monimg
             im0s = monim0s
@@ -121,7 +129,7 @@ def detect():
                 for i in range(3):
                     model(img, augment=opt.augment)[0]
 
-            print("avant inférence: ", time.time() - t10)
+            print("avant inférence: ", time() - t10)
             # Inference
             t1 = time_synchronized()
             with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
@@ -156,11 +164,17 @@ def detect():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
+                    labels = []
+                    startPoint = []
+                    endPoint = []
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
+                        print(xyxy[0].item())
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         print("xyxy: ", xywh)
-                        #approcheClient.prepareMsgObjectDetection(f'{names[int(cls)]} {conf:.2f}', [xywh[0], xywh[1]],[xywh[0]+xywh[2], xywh[1]+xywh[3]])
+                        labels.append(f'{names[int(cls)]} {conf:.2f}')
+                        startPoint.append([int(xyxy[0].item()), int(xyxy[1].item())])
+                        endPoint.append([int(xyxy[2].item()), int(xyxy[3].item())])
                         print("string detection: ", (f'{names[int(cls)]} {conf:.2f}', [xywh[0], xywh[1]],[xywh[0]+xywh[2], xywh[1]+xywh[3]]))
                         if save_txt:  # Write to file
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -173,6 +187,10 @@ def detect():
                             plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
                             # print("bbox", label)
                             # print(xyxy)
+
+                    # A ajouter apres la for de detect boxes
+                    msgHBBA: ObjectsDetection = objDetection.prepareMsgObjectsDetection(depth_image, labels, startPoint, endPoint)
+                    objects_detection_pub.publish(msgHBBA)
 
                 # Print time (inference + NMS)
                 print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
@@ -207,7 +225,7 @@ def detect():
             s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
             #print(f"Results saved to {save_dir}{s}")
 
-        print(f'Done. ({time.time() - t0:.3f}s)')
+        print(f'Done. ({time() - t0:.3f}s)')
 
 def listener():
     print('Listening...')
@@ -267,4 +285,5 @@ if __name__ == '__main__':
                 strip_optimizer(opt.weights)
         else:
             detect()
+    #listener
 
