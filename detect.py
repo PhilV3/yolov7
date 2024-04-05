@@ -267,5 +267,4 @@ if __name__ == '__main__':
                 strip_optimizer(opt.weights)
         else:
             detect()
-    #listener
 
