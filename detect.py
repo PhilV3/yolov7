@@ -227,32 +227,6 @@ def detect():
 
         print(f'Done. ({time() - t0:.3f}s)')
 
-def listener():
-    print('Listening...')
-    rospy.init_node('listener', anonymous=True)
-    rospy.Subscriber("/xtion/rgb/image_raw/compressed", CompressedImage, callback, queue_size=2)
-
-    # spin() simply keeps python from exiting until this node is stopped
-    rospy.spin()
-
-def callback(donnee: CompressedImage):
-    print("callback called", type(donnee.data))
-    with torch.no_grad():
-        buf = np.ndarray(shape=(1, len(donnee.data)), dtype = np.uint8, buffer = donnee.data)
-        image = cv2.imdecode(buf, cv2.IMREAD_ANYCOLOR)
-
-        if opt.update:  # update all models (to fix SourceChangeWarning)
-            for opt.weights in ['yolov7-tiny.pt']:
-                #detect(image)
-                strip_optimizer(opt.weights)
-        else:
-            #sacha save img to access in loadImages de dataset.py
-            cv2.imwrite("1.jpg", image)
-            print(f" The image with the result is saved")
-
-            #detect(image)
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7-tiny.pt', help='model.pt path(s)')
@@ -285,5 +259,4 @@ if __name__ == '__main__':
                 strip_optimizer(opt.weights)
         else:
             detect()
-    #listener
 
